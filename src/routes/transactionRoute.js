@@ -14,15 +14,9 @@ import {
 
 const router = express.Router();
 
-// ============================================================
-// MONEY TRANSFER ENDPOINTS
-// ============================================================
 
-/**
- * Process P2P money transfer
- * POST /api/transactions/transfer
- * Body: { payeeUserId, amount, serviceType?, productType?, remarks? }
- */
+// MONEY TRANSFER ENDPOINTS
+
 router.post(
   '/transfer',
   authenticate,
@@ -30,15 +24,8 @@ router.post(
   transactionController.MoneyTransferRequest
 );
 
-// ============================================================
 // GET TRANSACTION DETAILS
-// ============================================================
 
-/**
- * Get transaction by ID
- * GET /api/transactions/:transferId
- * Params: { transferId }
- */
 router.get(
   '/:transferId',
   authenticate,
@@ -46,15 +33,8 @@ router.get(
   transactionController.fetchTransactionDetail
 );
 
-// ============================================================
 // TRANSACTION HISTORY
-// ============================================================
 
-/**
- * Get current user's transaction history
- * GET /api/transactions/history/me
- * Query: { limit?, page?, status?, startDate?, endDate? }
- */
 router.get(
   '/history/me',
   authenticate,
@@ -62,11 +42,6 @@ router.get(
   transactionController.fetchTransactionHistry
 );
 
-/**
- * Get all transactions (Admin only)
- * GET /api/transactions/history/all
- * Query: { limit?, page?, status?, userId? }
- */
 router.get(
   '/history/all',
   authenticate,
@@ -75,15 +50,8 @@ router.get(
  transactionController.fetchAllTransaction
 );
 
-// ============================================================
 // TRANSACTION STATUS
-// ============================================================
 
-/**
- * Check transaction status
- * GET /api/transactions/status/:transferId
- * Params: { transferId }
- */
 router.get(
   '/status/:transferId',
   authenticate,
@@ -91,31 +59,17 @@ router.get(
  transactionController.fetchTransactionStatus
 );
 
-// ============================================================
 // RECHARGE ENDPOINTS
-// ============================================================
 
-/**
- * Mobile/DTH Recharge
- * POST /api/transactions/recharge
- * Body: { productId, serviceProvider, mobileNumber, amount, productType, operator?, circle? }
- */
 router.post(
   '/recharge',
   authenticate,
-  validateBody(rechargeSchema),
+  // validateBody(rechargeSchema),
  transactionController.RechargeRequest
 );
 
-// ============================================================
 // BILL PAYMENT ENDPOINTS
-// ============================================================
 
-/**
- * Bill Payment (Electricity, Water, Gas, etc.)
- * POST /api/transactions/bill-payment
- * Body: { serviceProvider, consumerNumber, amount, productType, billDetails?, remarks? }
- */
 router.post(
   '/bill-payment',
   authenticate,
@@ -123,14 +77,8 @@ router.post(
  transactionController.BillRequest
 );
 
-// ============================================================
 // TRANSACTION STATISTICS (Optional)
-// ============================================================
 
-/**
- * Get transaction statistics for current user
- * GET /api/transactions/stats/me
- */
 router.get(
   '/stats/me',
   authenticate,

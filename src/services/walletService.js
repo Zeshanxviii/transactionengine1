@@ -15,7 +15,6 @@ export class WalletService {
     if (!user.length) {
       throw new Error('User not found');
     }
-
     const walletId = generateId('WLT');
     
     await db.insert(itnWallet).values({
@@ -89,54 +88,130 @@ export class WalletService {
   }
 
   // Update wallet balance (internal method)
-  async updateWalletBalance(walletId, amount, transactionType, transactionId) {
-    const wallet = await db.select()
-      .from(itnWallet)
-      .where(eq(itnWallet.walletId, walletId))
-      .limit(1);
+  // async updateWalletBalance(walletId, amount, transactionType, transactionId) {
+  //   return await db.transaction(async (tx) => {
+  //     // 1. Fetch wallet and lock the row for update
+  //     const wallet = await tx.select()
+  //       .from(itnWallet)
+  //       .where(eq(itnWallet.walletId, walletId))
+  //       .for('update') // locks the row until transaction completes
+  //       .limit(1);
+  // console.log("This is wallet service",wallet);
+  //     if (!wallet.length) {
+  //       throw new Error('Wallet not found');
+  //     }
+  
+  //     const currentBalance = Number(wallet[0].balance) || 0;
+  //     const netCredit = Number(wallet[0].netCredit) || 0;
+  //     const netDebit = Number(wallet[0].netDebit) || 0;
+  
+  //     let newBalance;
+  //     let updatedNetCredit = netCredit;
+  //     let updatedNetDebit = netDebit;
+  
+  //     // 2. Calculate new balances safely
+  //     if (transactionType === 'CREDIT') {
+  //       newBalance = currentBalance + amount;
+  //       updatedNetCredit = netCredit + amount;
+  //     } else if (transactionType === 'DEBIT') {
+  //       if (currentBalance < amount) {
+  //         throw new Error('Insufficient balance');
+  //       }
+  //       newBalance = currentBalance - amount;
+  //       updatedNetDebit = netDebit + amount;
+  //     } else {
+  //       throw new Error('Invalid transaction type');
+  //     }
+  
+  //     // 3. Update wallet inside the same transaction
+  //     await tx.update(itnWallet)
+  //       .set({
+  //         prevBalance: currentBalance,
+  //         balance: newBalance,
+  //         netCredit: updatedNetCredit,
+  //         netDebit: updatedNetDebit,
+  //         lastTransactionType: transactionType,
+  //         lastTransactionId: transactionId,
+  //         lastTransactionOn: new Date(),
+  //       })
+  //       .where(eq(itnWallet.walletId, walletId));
+  
+  //     // 4. Return result
+  //     return {
+  //       previousBalance: currentBalance,
+  //       newBalance,
+  //       amount,
+  //       transactionType,
+  //     };
+  //   });
+  // }
 
-    if (!wallet.length) {
-      throw new Error('Wallet not found');
+   async updateWalletBalance(walletId, amount, transactionType, transactionId) {
+    // Ensure amount is a number
+    amount = Number(amount);
+    if (isNaN(amount) || amount <= 0) {
+      throw new Error('Invalid amount');
     }
 
-    const currentBalance = Number(wallet[0].balance) || 0;
-    const netCredit = Number(wallet[0].netCredit) || 0;
-    const netDebit = Number(wallet[0].netDebit) || 0;
+    return await db.transaction(async (tx) => {
+      // 1️⃣ Fetch wallet and lock the row
+      const wallets = await tx.select()
+        .from(itnWallet)
+        .where(eq(itnWallet.walletId, walletId))
+        .for('update')
+        .limit(1);
 
-    let newBalance;
-    let updatedNetCredit = netCredit;
-    let updatedNetDebit = netDebit;
-
-    if (transactionType === 'CREDIT') {
-      newBalance = currentBalance + amount;
-      updatedNetCredit = netCredit + amount;
-    } else if (transactionType === 'DEBIT') {
-      if (currentBalance < amount) {
-        throw new Error('Insufficient balance');
+      if (!wallets.length) {
+        throw new Error('Wallet not found');
       }
-      newBalance = currentBalance - amount;
-      updatedNetDebit = netDebit + amount;
-    } else {
-      throw new Error('Invalid transaction type');
-    }
 
-    await db.update(itnWallet)
-      .set({
-        prevBalance: currentBalance,
-        balance: newBalance,
-        netCredit: updatedNetCredit,
-        netDebit: updatedNetDebit,
-        lastTransationType: transactionType,
-        lastTransationId: transactionId,
-        lastTransationOn: new Date(),
-      })
-      .where(eq(itnWallet.walletId, walletId));
+      const wallet = wallets[0];
+      const currentBalance = Number(wallet.balance) || 0;
+      const netCredit = Number(wallet.netCredit) || 0;
+      const netDebit = Number(wallet.netDebit) || 0;
 
-    return {
-      previousBalance: currentBalance,
-      newBalance,
-      amount,
-      transactionType,
-    };
+      // 2️⃣ Calculate new balances
+      let newBalance;
+      let updatedNetCredit = netCredit;
+      let updatedNetDebit = netDebit;
+
+      if (transactionType === 'CREDIT') {
+        newBalance = currentBalance + amount;
+        updatedNetCredit += amount;
+      } else if (transactionType === 'DEBIT') {
+        if (currentBalance < amount) {
+          throw new Error('Insufficient balance');
+        }
+        newBalance = currentBalance - amount;
+        updatedNetDebit += amount;
+      } else {
+        throw new Error('Invalid transaction type');
+      }
+
+      // 3️⃣ Update wallet safely inside the same transaction
+      await tx.update(itnWallet)
+        .set({
+          prevBalance: currentBalance,
+          balance: newBalance,
+          netCredit: updatedNetCredit,
+          netDebit: updatedNetDebit,
+          lastTransactionType: transactionType,
+          lastTransactionId: transactionId,
+          lastTransactionOn: new Date(),
+        })
+        .where(eq(itnWallet.walletId, walletId));
+
+      // 4️⃣ Return result
+      return {
+        previousBalance: currentBalance,
+        newBalance,
+        amount,
+        transactionType,
+      };
+    });
   }
+  
 }
+
+
+export const walletService = new WalletService();

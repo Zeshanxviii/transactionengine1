@@ -16,7 +16,7 @@ const router = express.Router();
 router.post(
   '/create',
   authenticate,
-  validateBody(createWalletSchema),
+  
   walletController.createWallet
 );
 

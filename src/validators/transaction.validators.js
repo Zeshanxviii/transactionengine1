@@ -86,6 +86,8 @@ const getTransactionHistorySchema = z.object({
 });
 
 // Recharge validation
+const RechargeTypeEnum = z.enum(['TOPUP', 'FULL']); // new enum
+
 const rechargeSchema = z.object({
   productId: z.string()
     .trim()
@@ -104,6 +106,7 @@ const rechargeSchema = z.object({
     .min(10, 'Minimum recharge amount is ₹10')
     .max(10000, 'Maximum recharge amount is ₹10,000'),
   productType: ProductTypeEnum,
+  rechargeType: RechargeTypeEnum,
   operator: z.string()
     .trim()
     .min(2, 'Operator name is required')
@@ -111,6 +114,11 @@ const rechargeSchema = z.object({
   circle: z.string()
     .trim()
     .optional(),
+  tx_pin: z.string()
+    .length(6, 'TX PIN must be 6 digits'),
+  serviceId: z.string()
+    .trim()
+    .min(3, 'Service ID is required'),
 });
 
 // Bill payment validation

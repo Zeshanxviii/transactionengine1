@@ -1,11 +1,11 @@
-import { WalletService} from '../../services/walletService.js';
+import { walletService} from '../../services/walletService.js';
 
 
 export const createWallet = async (req, res) => {
   try {
     const { userId, walletType } = req.body;
 
-    const result = await WalletService.createWallet(userId, walletType);
+    const result = await walletService.createWallet(userId, walletType);
 
     res.status(201).json({
       success: true,
@@ -25,7 +25,7 @@ export const fetchBalance =  async (req, res) => {
       const userId = req.user.userId;
       const { walletType } = req.query;
 
-      const balance = await WalletService.getBalance(userId, walletType);
+      const balance = await walletService.getBalance(userId, walletType);
 
       res.json({
         success: true,
@@ -46,7 +46,7 @@ export const getWalletBalance =  async (req, res) => {
       const userId = req.user.userId;
       const { walletType } = req.query;
 
-      const wallet = await WalletService.getWalletByUserId(userId, walletType);
+      const wallet = await walletService.getWalletByUserId(userId, walletType);
 
       if (!wallet) {
         return res.status(404).json({
@@ -83,7 +83,7 @@ export const getWalletBalance =  async (req, res) => {
       const { amount, walletType } = req.body;
 
       const amountInPaise = Math.round(amount * 100);
-      const hasSufficient = await WalletService.hasSufficientBalance(
+      const hasSufficient = await walletService.hasSufficientBalance(
         userId,
         amountInPaise,
         walletType

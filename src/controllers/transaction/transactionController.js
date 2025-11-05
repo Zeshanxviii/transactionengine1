@@ -1,11 +1,21 @@
 // get transaction detail by transaction id
-import { TransactionService } from '../../services/transactionService.js';
+import { transactionService } from '../../services/transactionService.js';
+import { subscriberService } from '../../services/subscriberService.js'
+import * as userService from '../../services/userService.js'
+import { walletService } from '../../services/walletService.js'
+import { productService } from '../../services/productService.js'
+import bcrypt from 'bcrypt';
+import { serviceTypeService } from '../../services/serviceTypeService.js'
+import { itnChannelUsers } from '../../database/schema/schema.js';
+import { db } from '../../database/db.js'
+import crypto from 'crypto';
+
 
 export const fetchTransactionDetail = async (req, res) => {
     try {
       const { transferId } = req.params;
 
-      const transaction = await TransactionService.getTransaction(transferId);
+      const transaction = await transactionService.getTransaction(transferId);
 
       // Check if user has permission to view this transaction
       if (
@@ -57,7 +67,7 @@ export const fetchTransactionHistry = async (req, res) => {
       const userId = req.user.userId;
       const { limit, page, status, startDate, endDate } = req.query;
 
-      const transactions = await TransactionService.getUserTransactions(
+      const transactions = await transactionService.getUserTransactions(
         userId,
         limit,
         { page, status, startDate, endDate }
@@ -86,7 +96,7 @@ export const fetchAllTransaction =  async (req, res) => {
       const { limit, page, status, startDate, endDate } = req.query;
 
       // Admin can see all transactions
-      const transactions = await TransactionService.getAllTransactions(
+      const transactions = await transactionService.getAllTransactions(
         limit,
         { page, status, startDate, endDate }
       );
@@ -113,7 +123,7 @@ export const fetchTransactionStatus =  async (req, res) => {
     try {
       const { transferId } = req.params;
 
-      const transaction = await TransactionService.getTransaction(transferId);
+      const transaction = await transactionService.getTransaction(transferId);
 
       // Check permission
       if (
@@ -153,48 +163,516 @@ export const fetchTransactionStatus =  async (req, res) => {
       });
     }
   }
-
-export const RechargeRequest =  async (req, res) => {
-    try {
-      const {
-        productId,
-        serviceProvider,
-        mobileNumber,
-        amount,
-        productType,
-        operator,
-        circle,
-      } = req.body;
-
-      const userId = req.user.userId;
-
-      // TODO: Implement recharge service integration
-      // This would integrate with third-party recharge APIs
-      // For now, return a placeholder response
-
-      res.status(501).json({
+  export const RechargeRequest = async (req, res) => {
+    const channelUserId = req.user.userId;
+  
+    const {
+      productId,
+      mobileNumber,
+      amount,
+      operator,
+      productType, 
+      rechargeType, 
+      tx_pin,     
+      serviceId
+    } = req.body;
+  
+    console.log('Recharge Request Body:', req.body);
+  
+    if (
+      !mobileNumber ||
+      !amount ||
+      !operator ||
+      !productType ||
+      !rechargeType ||
+      !tx_pin ||
+      !serviceId ||
+      !productId
+    ) {
+      return res.status(400).json({
         success: false,
-        message: 'Recharge service not yet implemented',
-        note: 'This endpoint will integrate with recharge APIs like PayTM, Razorpay, etc.',
-        receivedData: {
-          userId,
-          productId,
-          serviceProvider,
-          mobileNumber,
-          amount,
-          productType,
-          operator,
-          circle,
-        },
-      });
-    } catch (error) {
-      console.error('Recharge error:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'Recharge failed',
+        message: 'Missing required fields: mobileNumber, amount, operator, productType, rechargeType, and tx_pin are all required.',
       });
     }
-  }
+  
+    const rechargeAmount = parseFloat(amount);
+    if (isNaN(rechargeAmount) || rechargeAmount <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid recharge amount.' 
+      });
+    }
+  
+    let subscriber;
+    let subscriberWallet;
+    let merchant;
+    let merchantWallet;
+    let product;
+    let serviceType;
+  
+    try {
+      merchant = await userService.getUserById(channelUserId);
+      if (!merchant) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Merchant account not found.' 
+        });
+      }
+  
+      if (merchant.status !== 'ACTIVE') {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Merchant account is not active.' 
+        });
+      }
+  
+      const isPinValid = await bcrypt.compare(tx_pin.toString(), merchant.txnPin);
+      if (!isPinValid) {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Invalid transaction PIN.' 
+        });
+      }
+  
+      merchantWallet = await walletService.getWalletByUserId(channelUserId);
+      console.log("Merchant Wallet:", merchantWallet);
+  
+      if (!merchantWallet) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Merchant wallet not found.' 
+        });
+      }
+  
+      if (merchantWallet.status !== 'A') {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Merchant wallet is not active.' 
+        });
+      }
+  
+      subscriber = await subscriberService.getSubscriberByMsisdn(mobileNumber);
+      
+      if (!subscriber) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Subscriber account not found.' 
+        });
+      }
+  
+      if (subscriber.status !== 'Active') {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Subscriber account is not active.' 
+        });
+      }
+  
+      subscriberWallet = await walletService.getWalletByUserId(subscriber.subscriberId);
+      console.log("Subscriber Wallet:", subscriberWallet);
+  
+      if (!subscriberWallet) {
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Subscriber wallet not found.' 
+        });
+      }
+  
+      if (subscriberWallet.status !== 'A') {
+        return res.status(403).json({ 
+          success: false, 
+          message: 'Subscriber wallet is not active.' 
+        });
+      }
+  
+      const subscriberBalance = Number(subscriberWallet.balance);
+      if (subscriberBalance < rechargeAmount) {
+        return res.status(400).json({
+          success: false,
+          message: 'Insufficient subscriber wallet balance.',
+          currentBalance: subscriberBalance,
+          requestedAmount: rechargeAmount,
+        });
+      }
+  
+      product = await productService.getProductById(productId);
+  
+      if (!product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Recharge product/operator not found or not supported.',
+        });
+      }
+  
+      if (product.status !== 'Y') {
+        return res.status(400).json({
+          success: false,
+          message: 'This service is temporarily unavailable.',
+        });
+      }
+  
+      serviceType = await serviceTypeService.getServiceTypeById(serviceId);
+  
+      if (!serviceType) {
+        return res.status(404).json({
+          success: false,
+          message: 'Service type not found.',
+        });
+      }
+  
+    } catch (error) {
+      console.error('Validation error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to validate merchant, subscriber, or wallet.',
+        error: error.message,
+      });
+    }
+  
+    let transferId;
+    
+    try {
+      await db.transaction(async (tx) => {
+        transferId = crypto.randomUUID();
+        console.log('Starting transaction:', transferId);
+  
+        const txnHeader = await transactionService.createTransactionHeader({
+          transferId: transferId,
+          payerUserId: subscriber.subscriberId,  
+          payeeUserId: merchant.userId,          
+          amount: rechargeAmount,
+          serviceType: serviceType.serviceType,
+          productId: productId,
+          productType: productType,
+          serviceProvider: operator,
+          rechargeType: rechargeType,
+          transferStatus: 'PENDING',
+          details1: mobileNumber, 
+          createdBy: merchant.firstName,
+        }, tx);
+  
+        const txnId = txnHeader.transferId;
+        console.log('Transaction header created:', txnId);
+  
+        const subscriberPreviousBalance = Number(subscriberWallet.balance);
+        const subscriberPostBalance = subscriberPreviousBalance - rechargeAmount;
+  
+        await walletService.updateWalletBalance(
+          subscriberWallet.walletId, 
+          rechargeAmount,
+          'DEBIT',
+          txnId,
+          tx
+        );
+        console.log('Subscriber wallet debited:', rechargeAmount);
+  
+        await transactionService.createTransactionItem({
+          transferId: txnId,
+          partyId: subscriber.subscriberId,      
+          secondParty: merchant.userId,          
+          userType: subscriberWallet.userType || 'SUBSCRIBER',
+          userCategory: subscriberWallet.categoryCode || 'SUB',
+          transactionType: 'DEBIT',
+          approvedValue: rechargeAmount,
+          serviceType: serviceType.serviceType,
+          productId: productId,
+          productType: productType,
+          serviceProvider: operator,
+          rechargeType: rechargeType,
+          previousBalance: subscriberPreviousBalance,
+          postBalance: subscriberPostBalance,
+          transferStatus: 'SUCCESS',
+        }, tx);
+        console.log('Subscriber transaction item created (DEBIT)');
+  
+        const merchantPreviousBalance = Number(merchantWallet.balance);
+        const merchantPostBalance = merchantPreviousBalance + rechargeAmount;
+  
+        await walletService.updateWalletBalance(
+          merchantWallet.walletId,    
+          rechargeAmount,
+          'CREDIT',
+          txnId,
+          tx
+        );
+        console.log('Merchant wallet credited:', rechargeAmount);
+  
+        await transactionService.createTransactionItem({
+          transferId: txnId,
+          partyId: merchant.userId,              
+          secondParty: subscriber.subscriberId,  
+          userType: merchant.userType,
+          userCategory: merchant.categoryCode,
+          transactionType: 'CREDIT',
+          approvedValue: rechargeAmount,
+          serviceType: serviceType.serviceType,
+          productId: productId,
+          productType: productType,
+          serviceProvider: operator,
+          rechargeType: rechargeType,
+          previousBalance: merchantPreviousBalance,
+          postBalance: merchantPostBalance,
+          transferStatus: 'SUCCESS',
+        }, tx);
+        console.log('Merchant transaction item created (CREDIT)');
+  
+        //external api call
+        await transactionService.updateTransactionStatus(
+          transferId,
+          'SUCCESS',
+          'Recharge completed successfully',
+          tx
+        );
+        console.log('Transaction status updated to SUCCESS');
+      });
+  
+      return res.status(200).json({
+        success: true,
+        message: 'Recharge completed successfully',
+        data: {
+          transferId: transferId,
+          mobileNumber: mobileNumber,
+          amount: rechargeAmount,
+          operator: operator,
+          subscriberBalance: Number(subscriberWallet.balance) - rechargeAmount,
+          merchantBalance: Number(merchantWallet.balance) + rechargeAmount,
+        }
+      });
+  
+    } catch (error) {
+      console.error('Recharge transaction error:', error);
+      
+      if (transferId) {
+        try {
+          await transactionService.updateTransactionStatus(
+            transferId,
+            'FAILED',
+            error.message || 'Transaction processing failed'
+          );
+        } catch (updateError) {
+          console.error('Failed to update transaction status:', updateError);
+        }
+      }
+  
+      return res.status(500).json({
+        success: false,
+        message: 'Recharge processing failed',
+        error: error.message,
+        transferId: transferId,
+      });
+    }
+  };
+//   const channelUserId = req.user.userId;
+
+//   const {
+//     productId,
+//     mobileNumber,
+//     amount,
+//     operator,
+//     productType, 
+//     rechargeType, 
+//     tx_pin,     
+//     serviceId
+//   } = req.body;
+//  console.log(req.body);
+//   if (
+//     !mobileNumber ||
+//     !amount ||
+//     !operator ||
+//     !productType ||
+//     !rechargeType ||
+//     !tx_pin ||
+//     !serviceId ||
+//     !productId
+//   ) {
+//     return res.status(400).json({
+//       success: false,
+//       message:
+//         'Missing required fields: mobileNumber, amount, operator, productType, rechargeType, and tx_pin are all required.',
+//     });
+//   }
+//   let subscriberWallet;
+//   const subscriber = await subscriberService.getSubscriberByMsisdn(mobileNumber);
+//   const MerchantWallet = await walletService.getWalletByUserId(channelUserId);
+//   console.log("This is merchant wallet" , MerchantWallet)
+//   const rechargeAmount = parseFloat(amount);
+//   if (isNaN(rechargeAmount) || rechargeAmount <= 0) {
+//     return res
+//     .status(400)
+//     .json({ success: false, message: 'Invalid recharge amount.' });
+//   }
+  
+  
+//   let merchant;
+//   let merchantWallet;
+//   let amountInLowestDenom;
+  
+//   try {
+//     merchant = await userService.getUserById(channelUserId);
+//     if (!merchant) {
+//       return res
+//       .status(401)
+//       .json({ success: false, message: 'Merchant account not found.' });
+//     }
+//     if (merchant.status !== 'ACTIVE') {
+//       return res
+//       .status(403)
+//       .json({ success: false, message: 'Merchant account is not active.' });
+//     }
+    
+    
+//     subscriberWallet = await walletService.getWalletByUserId(subscriber.subscriberId);
+//     console.log(subscriberWallet.status);
+//     if (subscriberWallet.status !== 'A') {
+//       return res
+//       .status(403)
+//       .json({ success: false, message: 'subscriber wallet is not active.' });
+//     }
+    
+//     const isPinValid = await bcrypt.compare(tx_pin.toString(), merchant.txnPin);
+    
+//     if (!isPinValid) {
+//       return res
+//       .status(403)
+//       .json({ success: false, message: 'Invalid transaction PIN.' });
+//     }
+    
+//     if (!subscriber) {
+//       return res
+//       .status(401)
+//       .json({ success: false, message: 'subscriber account not found.' });
+//     }
+//     if (subscriber.status !== 'Active') {
+//       return res
+//       .status(403)
+//       .json({ success: false, message: 'Subscriber account is not active.' });
+//     }
+//     // console.log(merchantWallet.walletId);
+    
+    
+//     if (subscriberWallet.balance < rechargeAmount) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Insufficient wallet balance.',
+//         currentBalance: merchantWallet.balance,
+//         requestedAmount: rechargeAmount,
+//       });
+//     }
+//   } catch (error) {
+//     console.error('Validation error:', error);
+//     return res
+//     .status(500)
+//     .json({
+//       success: false,
+//       message: 'Failed to validate merchant or wallet.',
+//     });
+//   }
+
+//   let product;
+//   try {
+//     product = await productService.getProductById(productId);
+
+//     if (!product) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Recharge product/operator not found or not supported.',
+//       });
+//     }
+//     if (product.status !== 'Y') {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'This service is temporarily unavailable.',
+//       });
+//     }
+//   } catch (error) {
+//     console.error('Product validation error:', error);
+//     return res
+//       .status(500)
+//       .json({ success: false, message: 'Failed to validate product.' });
+//   }
+
+//   const serviceType = await serviceTypeService.getServiceTypeById(serviceId);
+
+//   try {
+//     await db.transaction(async (tx) => {
+//       const transferId = crypto.randomUUID();
+//       // Step 1. Create transaction header
+//       const txnHeader = await transactionService.createTransactionHeader({
+//         transferId: transferId,
+//         payerUserId: merchant.userId,
+//         payeeUserId: subscriber.subscriberId,
+//         amount: amount,
+//         serviceType: serviceType.serviceType,
+//         transferStatus: 'PENDING',
+//         createdBy: merchant.firstName,
+//       }, tx);
+    
+//       const txnId = txnHeader.transferId;
+    
+//       // Step 2. Debit merchant wallet
+//       await walletService.updateWalletBalance(
+//         subscriberWallet.walletId,
+//         amount,
+//         'DEBIT',
+//         txnId,
+//         tx
+//       );
+      
+    
+//       // Step 3. Log merchant debit
+//       await transactionService.createTransactionItem({
+//         transferId: txnId,
+//         partyId: MerchantWallet.userId,
+//         secondParty: subscriber.subscriberId,
+//         userType: MerchantWallet.userType,
+//         transactionType: 'DEBIT',
+//         approvedValue: amount,
+//         serviceType: serviceType.serviceType,
+//         productType,
+//         previousBalance: Number(MerchantWallet.balance),
+//         postBalance: Number(MerchantWallet.balance) - amount,
+//       }, tx);
+    
+//       // Step 4. Credit subscriber wallet
+//       await walletService.updateWalletBalance(
+//         subscriberWallet.walletId,
+//         amount,
+//         'CREDIT',
+//         txnId,
+//         tx
+//       );
+    
+//       // Step 5. Log subscriber credit
+//       await transactionService.createTransactionItem({
+//         transferId : txnId,
+//         partyId: subscriber.subscriberId,
+//         secondParty: merchant.userId,
+//         userType: subscriberWallet.user_type,
+//         transactionType: 'CREDIT',
+//         approvedValue: amount,
+//         serviceType: serviceType.serviceType,
+//         productType,
+//         previousBalance: Number(subscriberWallet.balance),
+//         postBalance: Number(subscriberWallet.balance) + amount,
+//       }, tx);
+    
+//       //external api call skip
+//       console.log("trans",transferId);
+//       console.log("txn",txnId);
+      
+//       await transactionService.updateTransactionStatus(
+//         transferId,
+//         'SUCCESS',
+//          'Recharge Successful',
+//        tx);
+//     });
+//   } catch (error) {
+//     console.error('Recharge transaction error:', error);
+//     return res.status(500).json({
+//         success: false,
+//         message: error.message || 'Recharge processing failed.',
+//       });
+//   }
+// };
 
 export const BillRequest =  async (req, res) => {
     try {

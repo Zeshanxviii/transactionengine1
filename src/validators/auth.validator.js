@@ -16,4 +16,8 @@ export const createUserSchema = z.object({
   userType: z.enum(['USER', 'MERCHANT', 'DISTRIBUTOR', 'ADMIN']),
   categoryCode: z.string().optional(),
   status: z.string().default('ACTIVE'),
+  txnPin: z.string()
+  .length(6, 'TxnPin must be exactly 6 characters')
+  .regex(/^\d+$/, 'TxnPin must contain only digits')
+  .default('000000')
 });

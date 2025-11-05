@@ -1,14 +1,19 @@
 import express from "express";
 import "dotenv/config";
-// import userRoutes from "./routes/userRoutes.js"; 
 import walletRoutes from './routes/walletRoute.js'
 import authRoutes from './routes/authRoutes.js'
 import transactionRoutes from './routes/transactionRoute.js'
+import thresholdRoutes from './routes/thresholdRoutes.js'
+import subscriberRoutes from './routes/subscriberRoutes.js'
+import productRoutes from './routes/productRoutes.js'
+
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 app.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -19,19 +24,20 @@ app.get('/health', (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send('Hello World!');
+  res.send('🚀 Transaction Engine API - Running');
 });
+
 
 app.use('/api/auth', authRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/thresholds', thresholdRoutes);
+app.use('/api/subscribers', subscriberRoutes);
+app.use('/api/products', productRoutes);
 
-
-// app.use('/users',userRoutes)
-
-
+// Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
+  console.error('Middleware Error:', err);
   
   res.status(err.status || 500).json({
     success: false,

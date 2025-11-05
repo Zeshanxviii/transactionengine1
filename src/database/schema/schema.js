@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, tinyint, text, datetime, timestamp, bigint, int, primaryKey, index, unique } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, tinyint, text, datetime, mysqlEnum, timestamp, bigint, int, primaryKey, index, unique } from 'drizzle-orm/mysql-core';
 import { relations } from 'drizzle-orm';
 
 // Channel Users Table
@@ -56,14 +56,14 @@ export const itnChannelUsers = mysqlTable('itn_channel_users', {
 });
 
 // Default Threshold Table
-export const itnDefaultThreshold = mysqlTable('itn_default_threshold', {
-  setDefaultId: varchar('set_default_id', { length: 20 }).notNull().primaryKey(),
-  thresProfileId: varchar('thres_profile_id', { length: 20 }),
-  thresholdName: varchar('threshold_name', { length: 20 }),
-  userType: varchar('user_type', { length: 20 }),
-  categoryCode: varchar('category_code', { length: 20 }),
-  status: varchar('status', { length: 1 }),
-});
+// export const itnDefaultThreshold = mysqlTable('itn_default_threshold', {
+//   setDefaultId: varchar('set_default_id', { length: 20 }).notNull().primaryKey(),
+//   thresProfileId: varchar('thres_profile_id', { length: 20 }),
+//   thresholdName: varchar('threshold_name', { length: 20 }),
+//   userType: varchar('user_type', { length: 20 }),
+//   categoryCode: varchar('category_code', { length: 20 }),
+//   status: varchar('status', { length: 1 }),
+// });
 
 // Money Transfer Service Charge Table
 export const itnMnytfrSrvchrg = mysqlTable('itn_mnytfr_srvchrg', {
@@ -178,7 +178,7 @@ export const itnServiceChargeProfile = mysqlTable('itn_service_charge_profile', 
 
 // Transaction Header Table
 export const itnTransactionHeader = mysqlTable('itn_transaction_header', {
-  transferId: varchar('transfer_id', { length: 20 }).notNull().primaryKey(),
+  transferId: varchar('transfer_id', { length: 50 }).notNull().primaryKey(),
   transferOn: datetime('transfer_on'),
   payerUserId: varchar('payer_user_id', { length: 20 }),
   payerAccountId: varchar('payer_account_id', { length: 20 }),
@@ -233,7 +233,7 @@ export const itnTransactionHeader = mysqlTable('itn_transaction_header', {
 
 // Transaction Items Table
 export const itnTransactionItems = mysqlTable('itn_transaction_items', {
-  transferId: varchar('transfer_id', { length: 20 }).notNull(),
+  transferId: varchar('transfer_id', { length: 50 }).notNull(),
   transferOn: timestamp('transfer_on').notNull().defaultNow().onUpdateNow(),
   transferStatus: varchar('transfer_status', { length: 20 }),
   partyId: varchar('party_id', { length: 20 }).notNull(),
@@ -353,4 +353,19 @@ export const itnThresholdsProfileDtlsRelations = relations(itnThresholdsProfileD
     fields: [itnThresholdsProfileDtls.thresProfileId],
     references: [itnThresholdsProfiles.thresProfileId],
   }),
+}));
+
+export const itnSubscribers = mysqlTable('itn_subscribers', {
+  subscriberId: varchar('subscriber_id', { length: 20 }).notNull().primaryKey(),
+  firstName: varchar('first_name', { length: 50 }),
+  lastName: varchar('last_name', { length: 50 }),
+  emailId: varchar('email_id', { length: 200 }),
+  msisdn: varchar('msisdn', { length: 10 }).notNull(),
+  status: mysqlEnum('status', ['Active', 'Inactive', 'Suspended']).default('Inactive'),
+  otp: varchar('otp', { length: 6 }),
+  createdOn: timestamp('created_on').defaultNow(),
+  deletedOn: timestamp('deleted_on'),
+  lastModifiedOn: timestamp('last_modified_on').defaultNow().onUpdateNow(),
+}, (table) => ({
+  msisdnUnique: unique('idx_msisdn_unique').on(table.msisdn),
 }));
